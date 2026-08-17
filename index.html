@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache">
 <title>玉兔号 · 星海航行</title>
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden;
@@ -45,6 +46,20 @@
     pointer-events: none; }
   /* ---- mobile portrait ---- */
   #backdrop { position: fixed; inset: 0; background: rgba(2, 4, 10, 0.52); display: none; z-index: 28; }
+  #ver { position: fixed; right: 10px; bottom: calc(5px + env(safe-area-inset-bottom)); color: rgba(140, 160, 200, 0.45);
+    font-size: 10px; z-index: 20; pointer-events: none; letter-spacing: 0.06em; }
+  #starcard { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%); background: rgba(8, 12, 22, 0.94);
+    border: 1px solid rgba(120, 160, 230, 0.35); border-radius: 14px; padding: 18px 22px; max-width: 340px; width: 86vw;
+    color: #cfd8ea; font-size: 13px; line-height: 1.55; display: none; z-index: 50;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); }
+  #starcard h3 { margin: 0 0 2px; color: #ffd98a; font-size: 17px; letter-spacing: 0.05em; }
+  #starcard .en { color: #8fa3c8; font-size: 11px; margin-bottom: 10px; }
+  #starcard table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; }
+  #starcard td { padding: 3px 0; border-bottom: 1px dashed rgba(120, 150, 210, 0.15); }
+  #starcard td:first-child { color: #8fa3c8; width: 72px; }
+  #starcard .note { color: #a8b8d8; font-size: 12px; }
+  #starcard button { margin-top: 10px; width: 100%; padding: 8px; border: 1px solid rgba(120, 160, 230, 0.4);
+    background: rgba(30, 42, 66, 0.8); color: #ffd98a; border-radius: 8px; cursor: pointer; }
   .mbtn { position: fixed; top: calc(10px + env(safe-area-inset-top)); width: 42px; height: 42px;
     border-radius: 12px; background: rgba(10, 14, 24, 0.82); border: 1px solid rgba(120, 150, 210, 0.25);
     color: #ffd98a; font-size: 17px; display: none; align-items: center; justify-content: center;
@@ -77,6 +92,7 @@
 <body>
 <canvas id="stage"></canvas>
 <div id="backdrop"></div>
+<div id="ver">玉兔号星海 v2.0</div>
 <div id="btnDests" class="mbtn">◈</div>
 <div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
@@ -97,6 +113,7 @@
     <label>目的地标签 <input type="checkbox" id="labelsOn" checked></label>
     <label>飞船显示 <input type="checkbox" id="rabbitOn" checked></label>
     <label>字符粒子 <input type="checkbox" id="glyphOn" checked></label>
+    <label>引擎音效 <input type="checkbox" id="audioOn"></label>
   </div>
 </div>
 <div id="confirm" class="panel">
@@ -106,6 +123,18 @@
 </div>
 <div id="tooltip"></div>
 <div id="toast"></div>
+<div id="starcard">
+  <h3 id="scName"></h3><div class="en" id="scEn"></div>
+  <table>
+    <tr><td>光谱类型</td><td id="scSp"></td></tr>
+    <tr><td>质量</td><td id="scM"></td></tr>
+    <tr><td>半径</td><td id="scR"></td></tr>
+    <tr><td>表面温度</td><td id="scT"></td></tr>
+    <tr><td>当前距离</td><td id="scD"></td></tr>
+  </table>
+  <div class="note" id="scNote"></div>
+  <button id="scClose">继续航行</button>
+</div>
 <div id="hint">拖动旋转视角 · 点击星标选目的地 · 滚轮调速 · [S]字符切换 · [ESC]中止航行</div>
 <div id="credit">恒星数据：HYG Database v4.1 (CC BY-SA 4.0) · astronexus</div>
 <script>
@@ -158,6 +187,8 @@
     sc32[s] = packC(pc[0], pc[1], pc[2]);
   }
   // dims for streak fade
+  var P32 = new Uint32Array(12);
+  for (var pk = 0; pk < 12; pk++) P32[pk] = packC(PAL[pk][0], PAL[pk][1], PAL[pk][2]);
   var PAL55 = new Uint32Array(12), PAL30 = new Uint32Array(12);
   for (var pi = 0; pi < 12; pi++) {
     var pcx = PAL[pi];
@@ -211,8 +242,7 @@
     var rq = p * 8;
     var rx = rb[rq] | (rb[rq + 1] << 8), ry = rb[rq + 2] | (rb[rq + 3] << 8);
     hx[p] = rx; hy[p] = ry;
-    px[p] = rx + (Math.random() - 0.5) * 340;
-    py[p] = ry + (Math.random() - 0.5) * 340;
+    px[p] = rx; py[p] = ry;
     gi[p] = rb[rq + 7];
     col32[p] = packC(rb[rq + 4], rb[rq + 5], rb[rq + 6]);
   }
@@ -245,8 +275,9 @@
     F = (canvas.height / 2) / Math.tan(37.5 * Math.PI / 180);
     sfield = ctx.createImageData(canvas.width, canvas.height);
     sbuf = new Uint32Array(sfield.data.buffer);
-    var fitW = (H > W) ? W * 1.18 : W;   // portrait: widen so the cruiser fills the screen
-    scale = Math.min(fitW / IMG_W, H / IMG_H);
+    var fitW = (H > W) ? W * 1.18 : W;
+    scale = Math.min(fitW / IMG_W, H / IMG_H) * 0.5;   // ship at half size, stays centered
+    shipDirty = true;
     offX = (W - IMG_W * scale) / 2;
     offY = (H - IMG_H * scale) / 2;
     ctx.imageSmoothingEnabled = false;
@@ -348,7 +379,7 @@
       warpLevel = Math.min(10, Math.log(auto / 0.35) / Math.log(2.6));
       warpEl.value = warpLevel.toFixed(2);
     }
-    toast('启程 → ' + DESTS.filter(function (e) { return e.i === targetIdx; })[0].cn);
+    toast('启程 → ' + destByI[targetIdx].cn);
   }
   var travelD0 = 1;
 
@@ -356,8 +387,10 @@
     mode = 'idle';
     vNow = 0;
     if (targetIdx >= 0 && reason !== 'abort') {
-      var d = DESTS.filter(function (e) { return e.i === targetIdx; })[0];
+      var d = destByI[targetIdx];
       toast('已抵达 ' + d.cn + ' · ' + fmtLy(0.35));
+      showStarCard(d);
+      audioPing();
       // face the star
       aimAt(targetIdx, true);
     } else toast('航行中止');
@@ -376,9 +409,9 @@
   }
 
   // ================= input =================
-  var mxImg = -1e9, myImg = -1e9;
   var dragging = false, dragMoved = 0, lastPX = 0, lastPY = 0;
   var destScreen = [];   // [{i, x, y}] CSS px, updated each frame
+  var destByI = {}; DESTS.forEach(function (e) { destByI[e.i] = e; });
 
   canvas.addEventListener('pointerdown', function (e) {
     dragging = true; dragMoved = 0; lastPX = e.clientX; lastPY = e.clientY;
@@ -387,7 +420,6 @@
   function endPointer(e) {
     if (!dragging) return;
     dragging = false;
-    mxImg = myImg = -1e9;         // clear scatter point so particles fully recover
     if (dragMoved < 6) {          // treat as click -> hit test dests
       var hit = -1, best = 18;
       for (var j = 0; j < destScreen.length; j++) {
@@ -399,12 +431,7 @@
   }
   window.addEventListener('pointerup', endPointer);
   window.addEventListener('pointercancel', endPointer);
-  document.documentElement.addEventListener('mouseleave', function () { mxImg = myImg = -1e9; });
   window.addEventListener('pointermove', function (e) {
-    if (e.pointerType === 'mouse' && !dragging) {  // hover-only scatter: touch drag rotates view
-      mxImg = (e.clientX - offX) / scale;
-      myImg = (e.clientY - offY) / scale;
-    }
     if (dragging) {
       var dxm = e.clientX - lastPX, dym = e.clientY - lastPY;
       dragMoved += Math.abs(dxm) + Math.abs(dym);
@@ -439,7 +466,7 @@
   }, { passive: true });
   window.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && mode === 'travel') { stopTravel('abort'); wake(); }
-    if (e.key === 's' || e.key === 'S') { params.glyphOn = !params.glyphOn; $('glyphOn').checked = params.glyphOn; saveParams(); wake(); }
+    if (e.key === 's' || e.key === 'S') { params.glyphOn = !params.glyphOn; $('glyphOn').checked = params.glyphOn; shipDirty = true; saveParams(); wake(); }
   });
 
   // params UI
@@ -455,7 +482,7 @@
   $('trailGain').addEventListener('input', function () { params.trailGain = parseFloat(this.value); saveParams(); wake(); });
   $('labelsOn').addEventListener('change', function () { params.labelsOn = this.checked; saveParams(); wake(); });
   $('rabbitOn').addEventListener('change', function () { params.rabbitOn = this.checked; saveParams(); wake(); });
-  $('glyphOn').addEventListener('change', function () { params.glyphOn = this.checked; saveParams(); wake(); });
+  $('glyphOn').addEventListener('change', function () { params.glyphOn = this.checked; shipDirty = true; saveParams(); wake(); });
   $('destsTitle').onclick = function () {
     var ul = destListEl; ul.style.display = ul.style.display === 'none' ? '' : 'none';
   };
@@ -480,6 +507,66 @@
   if (('ontouchstart' in window) || navigator.maxTouchPoints > 0)
     $('hint').textContent = '拖动转向 · 点星标选目的地 · 顶部滑杆加速';
 
+  // ================= arrival star-card =================
+  var PHYS = {"Proxima Centauri":["M5.5Ve 红矮星","0.12 M☉","0.15 R☉","约 3050 K","距太阳最近的恒星，耀星，属半人马座α三合星系统"],"Rigil Kentaurus":["G2V 黄矮星","1.10 M☉","1.22 R☉","约 5790 K","半人马座α星A，类太阳恒星，与B星及比邻星构成三合星"],"Barnard's Star":["M4V 红矮星","0.14 M☉","0.20 R☉","约 3130 K","自行最大的恒星，年龄约100亿年的老年红矮星"],"Wolf 359":["M6.5V 红矮星","0.11 M☉","0.16 R☉","约 2800 K","极暗弱的耀星，质量仅略高于恒星下限"],"Lalande 21185":["M2V 红矮星","0.39 M☉","0.39 R☉","约 3830 K","北天最亮的红矮星之一，已知拥有行星系统"],"Sirius":["A1V 蓝白主序星","2.06 M☉","1.71 R☉","约 9940 K","夜空最亮恒星，伴有白矮星天狼B，古埃及历法依据"],"Luyten's Star":["M3.5V 红矮星","0.26 M☉","0.35 R☉","约 3370 K","高自行红矮星，紧邻南河三，已发现行星"],"Ross 154":["M3.5V 红矮星","0.24 M☉","0.31 R☉","约 3410 K","人马座耀星，耀发频繁"],"Ross 248":["M5.5V 红矮星","0.14 M☉","0.18 R☉","约 3100 K","约3.4万年后将取代比邻星成为距太阳最近的恒星"],"Epsilon Eridani":["K2V 橙矮星","0.82 M☉","0.74 R☉","约 5080 K","年轻的类太阳恒星，拥有小行星带与尘埃盘"],"Lacaille 9352":["M0.5V 红矮星","0.51 M☉","0.47 R☉","约 3690 K","高自行红矮星，已确认两颗行星"],"Ross 128":["M4V 红矮星","0.17 M☉","0.20 R☉","约 3190 K","拥有温带行星Ross 128 b，被认为是宜居候选"],"Procyon":["F5IV-V 黄白亚巨星","1.50 M☉","2.05 R☉","约 6530 K","小犬座α，\"南河三\"，同样伴有白矮星伴星"],"Tau Ceti":["G8V 黄矮星","0.78 M☉","0.79 R☉","约 5340 K","类太阳恒星，科幻作品常客，拥有庞大尘埃盘"],"Epsilon Indi":["K5V 橙矮星","0.69 M☉","0.73 R☉","约 4390 K","印第安座ε，伴有一对褐矮星"],"61 Cygni A":["K5V 橙矮星","0.70 M☉","0.67 R☉","约 4370 K","历史上第一颗测得视差（距离）的恒星（贝塞尔，1838）"],"Groombridge 34":["M1.5V 红矮星","0.39 M☉","0.39 R☉","约 3600 K","双星系统，两颗红矮星互绕"],"Vega":["A0V 蓝白主序星","2.14 M☉","2.36 R☉","约 9600 K","织女星，历史上的测光标准星，自转极快呈扁球形"],"Fomalhaut":["A3V 蓝白主序星","1.92 M☉","1.84 R☉","约 8590 K","北落师门，\"秋夜孤星\"，拥有醒目的尘埃碎屑环"],"Altair":["A7V 白色主序星","1.79 M☉","1.63 R☉","约 7550 K","牛郎星，自转一周仅约9小时，赤道显著隆起"],"Pollux":["K0III 橙巨星","1.91 M☉","约 8.8 R☉","约 4670 K","北河三，最近的巨星之一，已确认拥有系外行星"],"Arcturus":["K1.5III 橙巨星","1.08 M☉","约 25 R☉","约 4290 K","大角星，北天最亮恒星，红巨星分支代表"],"Capella":["G8III+G1III 双巨星","2.57 M☉ (合计)","约 12 R☉","约 4970 K","五车二，两对双星组成的四合星，主星对为双巨星"],"Deneb":["A2Ia 蓝白超巨星","约 19 M☉","约 203 R☉","约 8525 K","天津四，光度约为太阳20万倍，遥远却仍属一等星"],"Regulus":["B8IV 蓝白亚巨星","3.8 M☉","3.1 R☉","约 12460 K","轩辕十四，自转极快的四合星，赤道速度逾300 km/s"],"Spica":["B1V+B2V 蓝白双星","约 11 M☉ (主星)","约 7 R☉","约 22400 K","角宿一，大质量密近光谱双星，相互绕转仅4天"],"Antares":["M1.5Iab 红超巨星","约 12 M☉","约 680 R☉","约 3660 K","心宿二，\"火星之敌\"，未来超新星候选"],"Aldebaran":["K5III 橙巨星","1.16 M☉","约 44 R☉","约 3910 K","毕宿五，\"金牛之眼\"，毕星团前景巨星"],"Betelgeuse":["M1-2Ia 红超巨星","约 16.5 M☉","约 760 R☉","约 3600 K","参宿四，半规则变星，著名的近距超新星候选"],"Rigel":["B8Ia 蓝超巨星","约 21 M☉","约 79 R☉","约 12100 K","参宿七，猎户座最亮星，光度约为太阳12万倍"],"Achernar":["B6V 蓝白主序星","6.7 M☉","7.3 R☉","约 15000 K","水委一，已知自转最快的恒星之一，呈显著扁球形"],"Hadar":["B1III 蓝巨星","约 12 M☉","约 9 R☉","约 25000 K","马腹一（半人马座β），大质量近距双星"],"Acrux":["B0.5IV 蓝白亚巨星","约 17.8 M☉","约 7.8 R☉","约 24000 K","十字架二，南十字座最亮星，多星系统"],"Polaris":["F7Ib 黄超巨星","5.4 M☉","约 37.5 R☉","约 6015 K","北极星，现任北天极星，经典造父变星"],"Canopus":["A9II 亮巨星","约 8 M☉","约 71 R☉","约 7400 K","老人星，夜空第二亮星，航天器导航基准星"],"Castor":["A1V 六合星","2.15 M☉ (Aa)","2.4 R☉","约 10300 K","北河二，实为六颗恒星组成的复杂系统"],"Bellatrix":["B2III 蓝巨星","约 8.6 M☉","约 5.8 R☉","约 21800 K","参宿五，猎户座\"女武士星\""],"Alnilam":["B0Ia 蓝超巨星","约 30 M☉","约 32 R☉","约 27500 K","参宿二，猎户腰带中星，光度约为太阳40万倍"],"Mintaka":["O9.5II 蓝巨星","约 24 M☉","约 16.5 R☉","约 29500 K","参宿一，腰带西星，与赤道几乎精确重合"],"Algol":["B8V 食双星","3.17 M☉","2.73 R☉","约 12550 K","大陵五，\"魔星\"，食双星原型，亮度以2.87天周期变化"],"Mira":["M7III 红巨星","1.18 M☉","约 400 R☉","约 2900 K","刍藁增二，长周期变星原型，亮度变化逾千倍"],"Mizar":["A1V 白色主序星","2.2 M☉","2.4 R☉","约 9000 K","开阳，与辅星构成著名肉眼双星，实为四合星"],"Dubhe":["K0III 橙巨星","4.25 M☉","约 30 R☉","约 4660 K","天枢，北斗一，指极星之一，亮度轻微变化"],"Merak":["A1V 白色主序星","2.84 M☉","3.0 R☉","约 9377 K","天璇，北斗二，与天枢连线指向北极星"],"Mirfak":["F5Ib 黄超巨星","约 8.5 M☉","约 68 R☉","约 6350 K","天船三，英仙座α，英仙α星团核心"],"Hamal":["K2III 橙巨星","1.5 M☉","约 15 R☉","约 4480 K","娄宿三，白羊座α，秋夜明星"],"Alpheratz":["B8IV 蓝白亚巨星","3.8 M☉","2.7 R☉","约 13800 K","壁宿二，仙女座与飞马座共用\"秋季四边形\"角星"],"Menkalinan":["A1IV 食双星","2.77 M☉","2.7 R☉","约 9350 K","五车三，御夫座β，食光谱双星"]};
+  var cardTimer = 0;
+  function showStarCard(d) {
+    var p = PHYS[d.en];
+    $('scName').textContent = d.cn;
+    $('scEn').textContent = d.en;
+    if (p) {
+      $('scSp').textContent = p[0];
+      $('scM').textContent = p[1];
+      $('scR').textContent = p[2];
+      $('scT').textContent = p[3];
+      $('scNote').textContent = p[4];
+    } else { $('scSp').textContent = '—'; $('scM').textContent = '—'; $('scR').textContent = '—'; $('scT').textContent = '—'; $('scNote').textContent = ''; }
+    var dist = Math.hypot(gx[d.i] - camX, gy[d.i] - camY, gz[d.i] - camZ);
+    $('scD').textContent = fmtLy(dist) + '（约 ' + (dist * 3.26).toFixed(0) + ' 光年之外出发）';
+    $('starcard').style.display = 'block';
+    clearTimeout(cardTimer);
+    cardTimer = setTimeout(function () { $('starcard').style.display = 'none'; }, 25000);
+  }
+  $('scClose').onclick = function () { clearTimeout(cardTimer); $('starcard').style.display = 'none'; };
+
+  // ================= engine audio (opt-in) =================
+  var audioOn = false, actx = null, engGain = null, osc1 = null, osc2 = null;
+  function ensureAudio() {
+    if (actx) { actx.resume(); return; }
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    actx = new AC();
+    osc1 = actx.createOscillator(); osc1.type = 'sawtooth';
+    osc2 = actx.createOscillator(); osc2.type = 'triangle';
+    engGain = actx.createGain(); engGain.gain.value = 0;
+    var lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 620;
+    osc1.connect(engGain); osc2.connect(engGain); engGain.connect(lp); lp.connect(actx.destination);
+    osc1.start(); osc2.start();
+  }
+  function updateAudio() {
+    if (!actx || !audioOn) return;
+    var v = Math.min(1, vNow / 600);
+    engGain.gain.setTargetAtTime(0.03 + v * 0.2, actx.currentTime, 0.1);
+    osc1.frequency.setTargetAtTime(36 + v * 140, actx.currentTime, 0.08);
+    osc2.frequency.setTargetAtTime(55 + v * 210, actx.currentTime, 0.08);
+  }
+  function audioPing() {   // arrival chime
+    if (!actx || !audioOn) return;
+    var o = actx.createOscillator(), g2 = actx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(880, actx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(1318, actx.currentTime + 0.2);
+    g2.gain.setValueAtTime(0.16, actx.currentTime);
+    g2.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.7);
+    o.connect(g2); g2.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + 0.75);
+  }
+  $('audioOn').addEventListener('change', function () {
+    audioOn = this.checked;
+    if (audioOn) { ensureAudio(); wake(); }
+    else if (actx) engGain.gain.setTargetAtTime(0, actx.currentTime, 0.05);
+  });
+
   // ================= starfield render =================
   var NEAR = 0.05;
   function renderStars() {
@@ -489,6 +576,7 @@
     var trail = moving ? vNow * 0.07 * params.trailGain : 0;
     var magLim = params.magLimit;
     var brightBoost = moving ? Math.min(1, vNow / 600) : 0;
+    var relBeta = Math.min(0.75, Math.log10(1 + vNow) / 4.2);   // pseudo-relativistic factor
     var cx = camX, cyy = camY, cz = camZ;
     var i, wx, wy, wz, sx, sy, cIdx;
 
@@ -512,8 +600,17 @@
       var siz = 3.2 - adjM * 0.45;
       if (sdest[i] > 0) siz = Math.max(siz, 2.6);
       siz = Math.max(1, Math.min(adjM < -2 ? 9 : 4, siz)) * dpr * 1.05;
+      var cosT = 0;
+      if (relBeta > 0.05) {   // relativistic headlight: stars ahead grow
+        cosT = vz2 / (Math.hypot(wx, wy, wz) || 1);
+        siz *= 1 + relBeta * Math.max(0, cosT) * 0.45;
+      }
       var xi = sx | 0, yi = sy | 0, r2 = Math.max(1, (siz / 2 + 0.4) | 0);
       var base = sc32[i];
+      if (relBeta > 0.05) {   // doppler: heading direction blue-shifts, aft red-shifts
+        var ci4 = scol[i] - relBeta * cosT * 6.5;   // PAL[0]=bluest .. PAL[11]=reddest
+        base = P32[ci4 < 0 ? 0 : ci4 > 11 ? 11 : ci4 | 0];
+      }
       var xj, yj;
       if (r2 <= 1) {
         if (xi >= 0 && xi < w && yi >= 0 && yi < h) sbuf[yi * w + xi] = base;
@@ -645,36 +742,6 @@
   var R = Math.max(80, Math.min(IMG_W, IMG_H) * 0.105), R2 = R * R;
   var FORCE = 5.6, SPRING = 0.045, DAMP = 0.865;
   var maxV2 = 1;
-  function simulateRabbit() {
-    maxV2 = 0;
-    var wx = 0, wy = 0;
-    if (vNow > 1) {   // warp wind: push radially from screen center
-      var cxr = IMG_W / 2, cyr = IMG_H / 2;
-      var vxr = cxr - cxr, vyr = cyr - cyr; // rabbit centered: use per-particle radial below
-    }
-    for (var p2 = 0; p2 < RABBIT_COUNT; p2++) {
-      var ddx = px[p2] - mxImg, ddy = py[p2] - myImg;
-      var dd2 = ddx * ddx + ddy * ddy;
-      if (dd2 < R2 && dd2 > 0.01) {
-        var d = Math.sqrt(dd2), f2 = 1 - d / R;
-        f2 = f2 * f2 * FORCE;
-        var inv = 1 / d;
-        vx[p2] += ddx * inv * f2; vy[p2] += ddy * inv * f2;
-      }
-      if (vNow > 1) {  // radial wind from canvas center
-        var rwx = px[p2] - IMG_W / 2, rwy = py[p2] - IMG_H / 2;
-        var rw = Math.hypot(rwx, rwy) || 1;
-        var k = Math.min(0.9, vNow * 0.0009);
-        vx[p2] += (rwx / rw) * k; vy[p2] += (rwy / rw) * k;
-      }
-      vx[p2] += (hx[p2] - px[p2]) * SPRING;
-      vy[p2] += (hy[p2] - py[p2]) * SPRING;
-      vx[p2] *= DAMP; vy[p2] *= DAMP;
-      px[p2] += vx[p2]; py[p2] += vy[p2];
-      var s2 = vx[p2] * vx[p2] + vy[p2] * vy[p2];
-      if (s2 > maxV2) maxV2 = s2;
-    }
-  }
   // ================= engine flames =================
   function renderFlame() {
     var lv = Math.max(0, Math.min(1, (vNow - 0.4) / 500));
@@ -712,17 +779,13 @@
     }
     ctx.globalCompositeOperation = 'source-over';
   }
+  var shipDirty = true;   // ship is static now: repaint only on glyph toggle / resize
   function renderRabbit() {
+    if (!shipDirty) return;
     rbuf.fill(0);   // fully transparent: keep the starfield visible behind particles
     for (var p3 = 0; p3 < RABBIT_COUNT; p3++) {
       var c = col32[p3], m = params.glyphOn ? GLYPHS[gi[p3]] : SOLID;
-      var sp = vx[p3] * vx[p3] + vy[p3] * vy[p3];
-      if (sp > 0.35) {
-        var lift = Math.min(70, Math.sqrt(sp) * 9) | 0;
-        var rr = c & 255, gg2 = (c >> 8) & 255, bb2 = (c >> 16) & 255;
-        c = packC(Math.min(255, rr + lift), Math.min(255, gg2 + lift), Math.min(255, bb2 + lift));
-      }
-      var x0 = px[p3] | 0, y0 = py[p3] | 0;
+      var x0 = hx[p3] | 0, y0 = hy[p3] | 0;
       if (x0 <= -G || y0 <= -G || x0 >= IMG_W || y0 >= IMG_H) continue;
       for (var gy3 = 0; gy3 < G; gy3++) {
         var yy3 = y0 + gy3; if (yy3 < 0 || yy3 >= IMG_H) continue;
@@ -735,6 +798,7 @@
       }
     }
     octx.putImageData(imgData, 0, 0);
+    shipDirty = false;
   }
 
   // ================= navigation update =================
@@ -755,10 +819,12 @@
       var stopR = Math.max(0.35, 0.03 * travelD0);
       if (dist <= stopR) { stopTravel('arrive'); return; }
       var userV = warpToSpeed(warpLevel);
-      var a = Math.max(4, userV * 0.35);
+      var cruise = userV > 0 ? userV : 0.9;
+      var a = Math.max(4, cruise * 0.35);
       var brakeV = Math.sqrt(2 * a * Math.max(0, dist - stopR));
-      var targetV = Math.min(userV > 0 ? userV : 0.9, brakeV);
-      vEase += (targetV - vEase) * Math.min(1, dt * 1.4);
+      var targetV = userV <= 0 ? 0 : Math.min(cruise, brakeV);   // warp=0 -> brake to full stop & hold
+      var easeK = userV <= 0 ? 6 : 1.4;   // hard brake when paused
+      vEase += (targetV - vEase) * Math.min(1, dt * easeK);
       vNow = Math.max(0, vEase);
       camX += fx * vNow * dt; camY += fy * vNow * dt; camZ += fz * vNow * dt;
     } else {
@@ -774,16 +840,31 @@
     }
   }
 
+  var lastStatusStr = '';
   function updateHUD() {
     speedRead.textContent = fmtSpeed(vNow);
     if (mode === 'travel' && targetIdx >= 0) {
-      var d = DESTS.filter(function (e) { return e.i === targetIdx; })[0];
+      var d = destByI[targetIdx];
       var dist = Math.hypot(gx[targetIdx] - camX, gy[targetIdx] - camY, gz[targetIdx] - camZ);
-      var eta = vNow > 0.01 ? dist / vNow : Infinity;
+      var stopR = Math.max(0.35, 0.03 * travelD0);
+      var remain = Math.max(0, dist - stopR);
+      var cruise = warpToSpeed(warpLevel);
+      var eta;
+      if (cruise <= 0.01) eta = Infinity;   // paused: no countdown until speed raised
+      else {
+        var a2 = Math.max(4, Math.max(cruise, 0.9) * 0.35);
+        var vRef = Math.max(vNow, Math.min(cruise, Math.sqrt(2 * a2 * remain)));
+        // accel/cruise/brake profile -> monotonic decreasing estimate
+        eta = remain <= vRef * vRef / (2 * a2) ? 2 * remain / Math.max(vRef, 0.01)
+          : vRef / a2 + (remain - vRef * vRef / (2 * a2)) / cruise;
+      }
+      var paused = vNow < 0.05 && warpLevel <= 0;
+      var str = '航行中 → ' + d.cn + ' · 剩余 ' + fmtLy(remain) + ' · 预计 ' +
+        (eta < Infinity ? (eta < 0.2 ? '即将抵达' : eta.toFixed(eta < 10 ? 1 : 0) + ' 秒') : '—') +
+        (paused ? ' ·（已暂停，调高速度档继续）' : '');
       statusEl.style.display = 'block';
-      statusEl.textContent = '航行中 → ' + d.cn + ' · 剩余 ' + fmtLy(dist) +
-        ' · 预计 ' + (eta < Infinity ? eta.toFixed(eta < 10 ? 1 : 0) + ' 秒' : '—');
-    } else statusEl.style.display = 'none';
+      if (str !== lastStatusStr) { statusEl.textContent = str; lastStatusStr = str; }
+    } else { statusEl.style.display = 'none'; lastStatusStr = ''; }
   }
 
   // ================= main loop =================
@@ -795,16 +876,17 @@
     lastT = t;
     if (!sleeping) {
       updateNav(dt);
-      simulateRabbit();
       renderStars();
       if (params.rabbitOn) {
         renderFlame();
         renderRabbit();
         var jitA = Math.min(2.4, vNow / 300);
         var jx2 = (Math.random() - 0.5) * jitA, jy2 = (Math.random() - 0.5) * jitA * 0.7;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);   // physical px space: avoid dpr^2 offset after renderFlame
         ctx.drawImage(off, (offX + jx2) * dpr, (offY + jy2) * dpr, IMG_W * scale * dpr, IMG_H * scale * dpr);
       }
       updateHUD();
+      updateAudio();
       if (vNow < 0.001 && maxV2 < 1e-4 && !dragging) stillFrames++;
       else stillFrames = 0;
       if (stillFrames > 30) sleeping = true;

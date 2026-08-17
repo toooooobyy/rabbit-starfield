@@ -190,7 +190,7 @@
   var dpr = 1, W = 0, H = 0, F = 1;
   var off = document.createElement('canvas');
   off.width = IMG_W; off.height = IMG_H;
-  var octx = off.getContext('2d', { alpha: false });
+  var octx = off.getContext('2d');   // transparent layer: stars must show through
   var imgData = octx.createImageData(IMG_W, IMG_H);
   var rbuf = new Uint32Array(imgData.data.buffer);
   var sfield = null, sbuf = null;
@@ -618,7 +618,7 @@
     }
   }
   function renderRabbit() {
-    rbuf.fill(0xFF000000);
+    rbuf.fill(0);   // fully transparent: keep the starfield visible behind particles
     for (var p3 = 0; p3 < RABBIT_COUNT; p3++) {
       var c = col32[p3], m = params.glyphOn ? GLYPHS[gi[p3]] : SOLID;
       var sp = vx[p3] * vx[p3] + vy[p3] * vy[p3];

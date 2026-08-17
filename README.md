@@ -2,7 +2,7 @@
 
 一个零依赖、单文件的粒子星海互动页面：真实银河系恒星坐标 + ASCII 字符玉兔粒子。
 
-**在线体验**：[GitHub Pages 演示](https://simonxxooxxoo.github.io/rabbit-starfield/)
+**在线体验**：[GitHub Pages 演示](https://toooooobyy.github.io/rabbit-starfield/)
 
 ## 功能
 

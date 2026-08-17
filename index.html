@@ -384,9 +384,10 @@
     dragging = true; dragMoved = 0; lastPX = e.clientX; lastPY = e.clientY;
     wake();
   });
-  window.addEventListener('pointerup', function (e) {
+  function endPointer(e) {
     if (!dragging) return;
     dragging = false;
+    mxImg = myImg = -1e9;         // clear scatter point so particles fully recover
     if (dragMoved < 6) {          // treat as click -> hit test dests
       var hit = -1, best = 18;
       for (var j = 0; j < destScreen.length; j++) {
@@ -395,10 +396,15 @@
       }
       if (hit >= 0) selectTarget(hit);
     }
-  });
+  }
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
+  document.documentElement.addEventListener('mouseleave', function () { mxImg = myImg = -1e9; });
   window.addEventListener('pointermove', function (e) {
-    mxImg = (e.clientX - offX) / scale;
-    myImg = (e.clientY - offY) / scale;
+    if (e.pointerType === 'mouse' && !dragging) {  // hover-only scatter: touch drag rotates view
+      mxImg = (e.clientX - offX) / scale;
+      myImg = (e.clientY - offY) / scale;
+    }
     if (dragging) {
       var dxm = e.clientX - lastPX, dym = e.clientY - lastPY;
       dragMoved += Math.abs(dxm) + Math.abs(dym);

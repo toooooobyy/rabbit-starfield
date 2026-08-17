@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>玉兔号 · 星海航行</title>
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden;
@@ -43,10 +43,42 @@
     letter-spacing: 0.1em; pointer-events: none; }
   #credit { position: fixed; right: 14px; bottom: 12px; font-size: 10px; color: rgba(140, 155, 185, 0.35);
     pointer-events: none; }
+  /* ---- mobile portrait ---- */
+  #backdrop { position: fixed; inset: 0; background: rgba(2, 4, 10, 0.52); display: none; z-index: 28; }
+  .mbtn { position: fixed; top: calc(10px + env(safe-area-inset-top)); width: 42px; height: 42px;
+    border-radius: 12px; background: rgba(10, 14, 24, 0.82); border: 1px solid rgba(120, 150, 210, 0.25);
+    color: #ffd98a; font-size: 17px; display: none; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 30; backdrop-filter: blur(6px); user-select: none; }
+  #btnDests { left: calc(10px + env(safe-area-inset-left)); }
+  #btnParams { right: calc(10px + env(safe-area-inset-right)); }
+  @media (max-width: 720px) {
+    .mbtn { display: flex; }
+    #topbar { top: calc(60px + env(safe-area-inset-top)); max-width: calc(100vw - 24px); }
+    #topbar input[type=range] { width: 32vw; }
+    #status { top: calc(110px + env(safe-area-inset-top)); max-width: 92vw; }
+    #confirm { top: calc(108px + env(safe-area-inset-top)); max-width: 92vw; flex-wrap: wrap;
+      justify-content: center; }
+    #dests, #params { top: 0; bottom: 0; max-height: none; width: min(78vw, 300px); z-index: 40;
+      transition: transform 0.25s ease; }
+    #dests { left: 0; transform: translateX(-105%); border-radius: 0 14px 14px 0;
+      padding-top: env(safe-area-inset-top); }
+    #params { right: 0; transform: translateX(105%); border-radius: 14px 0 0 14px;
+      padding-top: env(safe-area-inset-top); display: flex; flex-direction: column; }
+    #dests.open, #params.open { transform: translateX(0); }
+    #dests ul { flex: 1; -webkit-overflow-scrolling: touch; }
+    #params #paramsBody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    #hint { left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); font-size: 10px;
+      letter-spacing: 0.04em; }
+    #credit { display: none; }
+    #toast { bottom: calc(44px + env(safe-area-inset-bottom)); }
+  }
 </style>
 </head>
 <body>
 <canvas id="stage"></canvas>
+<div id="backdrop"></div>
+<div id="btnDests" class="mbtn">◈</div>
+<div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
   <span>速度档 <input type="range" id="warp" min="0" max="10" step="0.25" value="0"></span>
   <span id="speedRead">0 pc/s</span>
@@ -213,7 +245,8 @@
     F = (canvas.height / 2) / Math.tan(37.5 * Math.PI / 180);
     sfield = ctx.createImageData(canvas.width, canvas.height);
     sbuf = new Uint32Array(sfield.data.buffer);
-    scale = Math.min(W / IMG_W, H / IMG_H);
+    var fitW = (H > W) ? W * 1.18 : W;   // portrait: widen so the cruiser fills the screen
+    scale = Math.min(fitW / IMG_W, H / IMG_H);
     offX = (W - IMG_W * scale) / 2;
     offY = (H - IMG_H * scale) / 2;
     ctx.imageSmoothingEnabled = false;
@@ -295,6 +328,7 @@
     var dist = Math.hypot(gx[i] - camX, gy[i] - camY, gz[i] - camZ);
     confirmText.textContent = '目的地：' + d.cn + ' · ' + fmtLy(dist);
     confirmEl.style.display = 'flex';
+    closeDrawers();
     wake();
   }
   $('goBtn').onclick = function () {
@@ -422,6 +456,23 @@
   $('paramsTitle').onclick = function () {
     var b = $('paramsBody'); b.style.display = b.style.display === 'none' ? '' : 'none';
   };
+
+  // ================= mobile drawers =================
+  function closeDrawers() {
+    $('dests').classList.remove('open');
+    $('params').classList.remove('open');
+    $('backdrop').style.display = 'none';
+  }
+  function toggleDrawer(id) {
+    var el = $(id), wasOpen = el.classList.contains('open');
+    closeDrawers();
+    if (!wasOpen) { el.classList.add('open'); $('backdrop').style.display = 'block'; }
+  }
+  $('btnDests').onclick = function (e) { e.stopPropagation(); toggleDrawer('dests'); };
+  $('btnParams').onclick = function (e) { e.stopPropagation(); toggleDrawer('params'); };
+  $('backdrop').addEventListener('pointerdown', closeDrawers);
+  if (('ontouchstart' in window) || navigator.maxTouchPoints > 0)
+    $('hint').textContent = '拖动转向 · 点星标选目的地 · 顶部滑杆加速';
 
   // ================= starfield render =================
   var NEAR = 0.05;

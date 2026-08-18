@@ -557,6 +557,9 @@
     wake();
   }, { passive: true });
   window.addEventListener('wheel', function (e) {      // wheel: forward / reverse thrust
+    // v2.3: only the starfield canvas drives thrust; wheel over UI panels (destination
+    // list / params / star card) scrolls them natively instead of moving the ship
+    if (e.target !== canvas) return;
     setManual(manualWarp + (e.deltaY < 0 ? 0.25 : -0.25));
   }, { passive: true });
   canvas.addEventListener('contextmenu', function (e) {  // right-click star -> info card

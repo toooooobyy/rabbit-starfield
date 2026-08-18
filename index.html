@@ -92,7 +92,7 @@
 <body>
 <canvas id="stage"></canvas>
 <div id="backdrop"></div>
-<div id="ver">玉兔号星海 v2.0</div>
+<div id="ver">玉兔号星海 v2.1</div>
 <div id="btnDests" class="mbtn">◈</div>
 <div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
@@ -385,7 +385,9 @@
 
   function stopTravel(reason) {
     mode = 'idle';
-    vNow = 0;
+    vNow = 0; vEase = 0;
+    warpLevel = 0; warpEl.value = '0';   // engines off at arrival: no idle cruise past the star
+    wake();
     if (targetIdx >= 0 && reason !== 'abort') {
       var d = destByI[targetIdx];
       toast('已抵达 ' + d.cn + ' · ' + fmtLy(0.35));
@@ -826,7 +828,13 @@
       var easeK = userV <= 0 ? 6 : 1.4;   // hard brake when paused
       vEase += (targetV - vEase) * Math.min(1, dt * easeK);
       vNow = Math.max(0, vEase);
-      camX += fx * vNow * dt; camY += fy * vNow * dt; camZ += fz * vNow * dt;
+      var step = vNow * dt;
+      if (dist - step <= stopR) {   // would reach/pass the stop point this frame: land exactly
+        var kk = step > 0 ? Math.max(0, (dist - stopR) / step) : 0;
+        camX += fx * step * kk; camY += fy * step * kk; camZ += fz * step * kk;
+        stopTravel('arrive'); return;
+      }
+      camX += fx * step; camY += fy * step; camZ += fz * step;
     } else {
       vEase += (0 - vEase) * Math.min(1, dt * 2);
       vNow = vEase > 0.001 ? vEase : 0;

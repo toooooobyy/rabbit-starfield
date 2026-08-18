@@ -110,7 +110,7 @@
 <body>
 <canvas id="stage"></canvas>
 <div id="backdrop"></div>
-<div id="ver">玉兔号星海 v2.4</div>
+<div id="ver">玉兔号星海 v2.5</div>
 <div id="btnDests" class="mbtn">◈</div>
 <div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
@@ -736,18 +736,22 @@
       wx = gx[i] - cx; wy = gy[i] - cyy; wz = gz[i] - cz;
       var vz2 = wx * fx + wy * fy + wz * fz;
       if (vz2 <= NEAR) continue;
-      var vx2 = wx * rx2 + wy * ry2 + wz * rz2;
-      var vy2 = wx * ux + wy * uy + wz * uz;
-      sx = halfW + vx2 / vz2 * F;
-      if (sx < -4 || sx >= w + 4) continue;
-      sy = halfH - vy2 / vz2 * F;
-      if (sy < -4 || sy >= h + 4) continue;
-      cIdx = scol[i];
       // proximity-corrected magnitude: approaching a star makes it truly brighter/bigger
+      // (v2.5: computed BEFORE the screen cull — corona stars need a wider margin)
       var adjM = smag[i];
       if (vz2 < sdist[i] * 0.95 && vz2 < 300) {
         adjM = Math.max(-10, adjM + 5 * Math.log10(Math.max(vz2, 0.02) / sdist[i]));
       }
+      var vx2 = wx * rx2 + wy * ry2 + wz * rz2;
+      var vy2 = wx * ux + wy * uy + wz * uz;
+      sx = halfW + vx2 / vz2 * F;
+      // v2.5: corona stars (adjM < -2, glow radius up to 58px) cull at 64px margin so the
+      // glow fades naturally as the star drifts off-screen instead of popping out at the edge
+      var marg = adjM < -2 ? 64 : 4;
+      if (sx < -marg || sx >= w + marg) continue;
+      sy = halfH - vy2 / vz2 * F;
+      if (sy < -marg || sy >= h + marg) continue;
+      cIdx = scol[i];
       var siz = 3.2 - adjM * 0.45;
       if (sdest[i] > 0) siz = Math.max(siz, 2.6);
       siz = Math.max(1, Math.min(adjM < -2 ? 9 : 4, siz)) * dpr * 1.05;

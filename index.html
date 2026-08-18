@@ -110,7 +110,7 @@
 <body>
 <canvas id="stage"></canvas>
 <div id="backdrop"></div>
-<div id="ver">玉兔号星海 v2.3</div>
+<div id="ver">玉兔号星海 v2.4</div>
 <div id="btnDests" class="mbtn">◈</div>
 <div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
@@ -148,6 +148,7 @@
     <tr><td>质量</td><td id="scM"></td></tr>
     <tr><td>半径</td><td id="scR"></td></tr>
     <tr><td>表面温度</td><td id="scT"></td></tr>
+    <tr><td>距太阳</td><td id="scAbs"></td></tr>
     <tr><td>当前距离</td><td id="scD"></td></tr>
   </table>
   <div class="note" id="scNote"></div>
@@ -224,7 +225,22 @@
     gx = grow(gx, 0); gy = grow(gy, 0); gz = grow(gz, 0);   // Sol sits at (0,0,0)
     smag = grow(smag, -1.47);                                // tooltip magnitude
     sdist = grow(sdist, 1);                                  // avoid /0 elsewhere
+    // v2.4 fix: Sol was appended to the float arrays but NOT to scol/sc32/sdest, and the
+    // render loop stopped at STAR_COUNT -> the Sun itself was never drawn (no disk, no
+    // corona), only its ◇ label marker. Extend the color arrays and make it a destination.
+    var growU8 = function (src, fill) {
+      var o8 = new Uint8Array(src.length + 1);
+      o8.set(src); o8[src.length] = fill; return o8;
+    };
+    var growU32 = function (src, fill) {
+      var o32 = new Uint32Array(src.length + 1);
+      o32.set(src); o32[src.length] = fill; return o32;
+    };
+    scol = growU8(scol, 5);                                  // PAL[5] warm white (G2V)
+    sc32 = growU32(sc32, packC(PAL[5][0], PAL[5][1], PAL[5][2]));
+    sdest = growU8(sdest, 1);                                // destination flag: min size + label
   })();
+  var RENDER_COUNT = STAR_COUNT + 1;                         // include Sol when rasterizing
   DESTS.push({ cn: '太阳', en: 'Sol', i: SOL_I });
 
   // procedural galactic dust band (seeded)
@@ -300,7 +316,10 @@
   }
 
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // v2.4: cap render resolution on touch/narrow devices — the per-frame putImageData copy
+    // dominates frame time at dpr 2 (16MB/frame on 2560x1600); 1.5 halves it, stars still crisp
+    var touchLike = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth <= 720;
+    dpr = Math.min(window.devicePixelRatio || 1, touchLike ? 1.5 : 2);
     W = window.innerWidth; H = window.innerHeight;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     F = (canvas.height / 2) / Math.tan(37.5 * Math.PI / 180);
@@ -334,12 +353,12 @@
   var warpLevel = 0;
   var vEase = 0;
   var manualWarp = 0;          // signed manual speed level -10..10 (v2.2 manual flight)
+  var travelD0 = 1;            // trip distance at start (v2.4: declared with the other nav state)
   var keysOn = {};             // steering keys held down
 
   function warpToSpeed(w) {
     return w <= 0 ? 0 : 0.35 * Math.pow(2.6, w);
   }
-  function targetStarPos(i) { return [gx[i], gy[i], gz[i]]; }
 
   // ================= DOM refs =================
   var $ = function (id) { return document.getElementById(id); };
@@ -390,9 +409,10 @@
   rebuildDestList();
 
   // ================= target selection =================
+  var pendingTarget = -1;   // v2.4: selection awaiting confirmation — never hijacks an active trip
   function selectTarget(i) {
-    targetIdx = i;
-    var d = DESTS.filter(function (e) { return e.i === i; })[0];
+    pendingTarget = i;                       // hold for confirmation; active nav keeps its target
+    var d = destByI[i];
     var dist = Math.hypot(gx[i] - camX, gy[i] - camY, gz[i] - camZ);
     confirmText.textContent = '目的地：' + d.cn + ' · ' + fmtLy(dist);
     confirmEl.style.display = 'flex';
@@ -401,11 +421,16 @@
   }
   $('goBtn').onclick = function () {
     confirmEl.style.display = 'none';
-    if (targetIdx < 0) return;
+    if (pendingTarget < 0) return;
+    if ((mode === 'aiming' || mode === 'travel') && targetIdx !== pendingTarget)
+      stopTravel('abort');                   // retarget mid-flight: end the old trip cleanly
+    targetIdx = pendingTarget; pendingTarget = -1;
     mode = 'aiming';
     wake();
   };
-  $('cancelBtn').onclick = function () { confirmEl.style.display = 'none'; targetIdx = -1; };
+  $('cancelBtn').onclick = function () {     // v2.4: discard the new pick; original trip continues
+    confirmEl.style.display = 'none'; pendingTarget = -1;
+  };
 
   function stopRadius() {   // v2.3: Sol always parks close (true homecoming), stars park at 3% of trip
     return targetIdx === SOL_I ? 0.35 : Math.max(0.35, 0.03 * travelD0);
@@ -423,7 +448,6 @@
     manualWarp = warpLevel;   // v2.2: auto-nav takes over the helm
     toast('启程 → ' + destByI[targetIdx].cn);
   }
-  var travelD0 = 1;
 
   function stopTravel(reason) {
     mode = 'idle';
@@ -546,7 +570,7 @@
     if (!dragging && !pinchMode && e.pointerType === 'mouse') {
       var hit = hitDest(e.clientX, e.clientY, 16);
       if (hit >= 0) {
-        var dd2 = DESTS.filter(function (e2) { return e2.i === hit; })[0];
+        var dd2 = destByI[hit];   // v2.4: direct map lookup instead of DESTS.filter scan
         var dist2 = Math.hypot(gx[hit] - camX, gy[hit] - camY, gz[hit] - camZ);
         tooltip.innerHTML = '<b>' + dd2.cn + '</b> ' + dd2.en + '<br>距离 ' + fmtLy(dist2) + ' · 星等 ' + smag[hit].toFixed(1) + '<br>点击导航 · 长按/右键看介绍';
         tooltip.style.display = 'block';
@@ -562,12 +586,19 @@
     if (e.target !== canvas) return;
     setManual(manualWarp + (e.deltaY < 0 ? 0.25 : -0.25));
   }, { passive: true });
-  canvas.addEventListener('contextmenu', function (e) {  // right-click star -> info card
+  canvas.addEventListener('contextmenu', function (e) {  // v2.4: no native menu on the starfield at all
+    e.preventDefault();
     var hit = hitDest(e.clientX, e.clientY, 20);
-    if (hit >= 0) { e.preventDefault(); showStarCard(destByI[hit]); }
+    if (hit >= 0) showStarCard(destByI[hit]);   // right-click star -> info card
   });
   window.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && mode === 'travel') { stopTravel('abort'); wake(); }
+    if (e.key === 'Escape') {   // v2.4: layered — close star card > close confirm > abort nav
+      if ($('starcard').style.display === 'block') {
+        clearTimeout(cardTimer); $('starcard').style.display = 'none';
+      } else if (confirmEl.style.display === 'flex') {
+        confirmEl.style.display = 'none'; pendingTarget = -1;
+      } else if (mode === 'aiming' || mode === 'travel') { stopTravel('abort'); wake(); }
+    }
     if (e.key === 's' || e.key === 'S') { params.glyphOn = !params.glyphOn; $('glyphOn').checked = params.glyphOn; shipDirty = true; saveParams(); wake(); }
     if (e.key.indexOf('Arrow') === 0) { keysOn[e.key] = true; e.preventDefault(); wake(); }
   });
@@ -595,6 +626,7 @@
   $('homeBtn').onclick = function (e) {   // v2.3: one-click return to Sol (origin)
     e.stopPropagation();
     if (mode === 'travel' && targetIdx !== SOL_I) stopTravel('abort');
+    pendingTarget = -1;
     confirmEl.style.display = 'none';
     targetIdx = SOL_I;
     closeDrawers();
@@ -639,6 +671,8 @@
     } else { $('scSp').textContent = '—'; $('scM').textContent = '—'; $('scR').textContent = '—'; $('scT').textContent = '—'; $('scNote').textContent = ''; }
     var dist = Math.hypot(gx[d.i] - camX, gy[d.i] - camY, gz[d.i] - camZ);
     $('scD').textContent = fmtLy(dist);   // actual current distance (v2.2: no double conversion)
+    // v2.4: dual distances — catalog distance from Sol (0 for Sol itself) vs live parking distance
+    $('scAbs').textContent = fmtLy(d.i === SOL_I ? 0 : sdist[d.i]);
     $('starcard').style.display = 'block';
     clearTimeout(cardTimer);
     cardTimer = setTimeout(function () { $('starcard').style.display = 'none'; }, 25000);
@@ -697,7 +731,7 @@
     var cx = camX, cyy = camY, cz = camZ;
     var i, wx, wy, wz, sx, sy, cIdx;
 
-    for (i = 0; i < STAR_COUNT; i++) {
+    for (i = 0; i < RENDER_COUNT; i++) {
       if (sdest[i] === 0 && smag[i] > magLim) continue;
       wx = gx[i] - cx; wy = gy[i] - cyy; wz = gz[i] - cz;
       var vz2 = wx * fx + wy * fy + wz * fz;
@@ -847,7 +881,7 @@
       for (var d4 = 0; d4 < destScreen.length; d4++) {
         var isTarget = destScreen[d4].i === targetIdx;
         ctx.fillStyle = isTarget ? '#ffe6b0' : 'rgba(255, 224, 160, 0.85)';
-        var dName = DESTS.filter(function (e) { return e.i === destScreen[d4].i; })[0];
+        var dName = destByI[destScreen[d4].i];   // v2.4: direct map lookup instead of DESTS.filter scan
         ctx.fillText((isTarget ? '◈ ' : '◇ ') + dName.cn, destScreen[d4].x + 8, destScreen[d4].y - 6);
         ctx.fillRect(destScreen[d4].x - 2, destScreen[d4].y - 2, 4, 4);
       }

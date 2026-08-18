@@ -20,8 +20,22 @@
     border: 1px solid rgba(232, 180, 90, 0.35); display: none; }
   #dests { left: 12px; top: 12px; width: 208px; max-height: 72vh; display: flex; flex-direction: column; }
   #dests h3 { margin: 0; padding: 9px 12px; font-size: 12px; color: #ffd98a; cursor: pointer;
-    letter-spacing: 0.1em; border-bottom: 1px solid rgba(120, 150, 210, 0.18); user-select: none; }
-  #dests ul { margin: 0; padding: 4px 0; overflow-y: auto; list-style: none; }
+    letter-spacing: 0.1em; border-bottom: 1px solid rgba(120, 150, 210, 0.18); user-select: none;
+    display: flex; justify-content: space-between; align-items: center; }
+  #homeBtn { color: #ffd98a; font-size: 11px; letter-spacing: 0.05em; border: 1px solid rgba(232, 180, 90, 0.45);
+    border-radius: 8px; padding: 2px 9px; cursor: pointer; transition: background 0.15s, transform 0.1s; }
+  #homeBtn:hover { background: rgba(232, 180, 90, 0.22); }
+  #homeBtn:active { transform: scale(0.94); }
+  #dests ul { margin: 0; padding: 4px 6px 4px 0; overflow-y: auto; list-style: none; }
+  /* slim custom scrollbars (PC) */
+  #dests ul, #params #paramsBody {
+    scrollbar-width: thin; scrollbar-color: rgba(120, 150, 210, 0.35) transparent; }
+  #dests ul::-webkit-scrollbar, #params #paramsBody::-webkit-scrollbar { width: 6px; }
+  #dests ul::-webkit-scrollbar-track, #params #paramsBody::-webkit-scrollbar-track { background: transparent; }
+  #dests ul::-webkit-scrollbar-thumb, #params #paramsBody::-webkit-scrollbar-thumb {
+    background: rgba(120, 150, 210, 0.3); border-radius: 3px; }
+  #dests ul::-webkit-scrollbar-thumb:hover, #params #paramsBody::-webkit-scrollbar-thumb:hover {
+    background: rgba(232, 180, 90, 0.55); }
   #dests li { padding: 5px 12px; cursor: pointer; display: flex; justify-content: space-between; }
   #dests li:hover { background: rgba(232, 180, 90, 0.12); color: #ffe6b0; }
   #dests li .d { color: #7f8ca6; font-size: 11px; }
@@ -96,7 +110,7 @@
 <body>
 <canvas id="stage"></canvas>
 <div id="backdrop"></div>
-<div id="ver">玉兔号星海 v2.2</div>
+<div id="ver">玉兔号星海 v2.3</div>
 <div id="btnDests" class="mbtn">◈</div>
 <div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
@@ -105,7 +119,7 @@
 </div>
 <div id="status"></div>
 <div id="dests" class="panel">
-  <h3 id="destsTitle">◈ 目的地 <span id="destsCount"></span></h3>
+  <h3 id="destsTitle"><span>◈ 目的地 <span id="destsCount"></span></span><span id="homeBtn" title="一键返航太阳系">☀ 返航</span></h3>
   <ul id="destList"></ul>
 </div>
 <div id="params" class="panel">
@@ -199,6 +213,19 @@
     PAL55[pi] = packC((pcx[0] * 0.55) | 0, (pcx[1] * 0.55) | 0, (pcx[2] * 0.55) | 0);
     PAL30[pi] = packC((pcx[0] * 0.3) | 0, (pcx[1] * 0.3) | 0, (pcx[2] * 0.3) | 0);
   }
+
+  // v2.3: append Sol (heliocentric origin) as a navigable destination -> one-click return home
+  var SOL_I = STAR_COUNT;
+  (function () {
+    var grow = function (src, fill) {
+      var outp = new Float32Array(src.length + 1);
+      outp.set(src); outp[src.length] = fill; return outp;
+    };
+    gx = grow(gx, 0); gy = grow(gy, 0); gz = grow(gz, 0);   // Sol sits at (0,0,0)
+    smag = grow(smag, -1.47);                                // tooltip magnitude
+    sdist = grow(sdist, 1);                                  // avoid /0 elsewhere
+  })();
+  DESTS.push({ cn: '太阳', en: 'Sol', i: SOL_I });
 
   // procedural galactic dust band (seeded)
   var DUST_N = 6000;
@@ -380,6 +407,10 @@
   };
   $('cancelBtn').onclick = function () { confirmEl.style.display = 'none'; targetIdx = -1; };
 
+  function stopRadius() {   // v2.3: Sol always parks close (true homecoming), stars park at 3% of trip
+    return targetIdx === SOL_I ? 0.35 : Math.max(0.35, 0.03 * travelD0);
+  }
+
   function startTravel() {
     mode = 'travel';
     var d0 = Math.hypot(gx[targetIdx] - camX, gy[targetIdx] - camY, gz[targetIdx] - camZ);
@@ -558,6 +589,16 @@
   $('destsTitle').onclick = function () {
     var ul = destListEl; ul.style.display = ul.style.display === 'none' ? '' : 'none';
   };
+  $('homeBtn').onclick = function (e) {   // v2.3: one-click return to Sol (origin)
+    e.stopPropagation();
+    if (mode === 'travel' && targetIdx !== SOL_I) stopTravel('abort');
+    confirmEl.style.display = 'none';
+    targetIdx = SOL_I;
+    closeDrawers();
+    mode = 'aiming';
+    toast('一键返航 → 太阳系');
+    wake();
+  };
   $('paramsTitle').onclick = function () {
     var b = $('paramsBody'); b.style.display = b.style.display === 'none' ? '' : 'none';
   };
@@ -580,7 +621,7 @@
     $('hint').textContent = '单指拖动转向 · 双指捏合前进/后退 · 点星标导航 · 长按星标看介绍';
 
   // ================= arrival star-card =================
-  var PHYS = {"Proxima Centauri":["M5.5Ve 红矮星","0.12 M☉","0.15 R☉","约 3050 K","距太阳最近的恒星，耀星，属半人马座α三合星系统"],"Rigil Kentaurus":["G2V 黄矮星","1.10 M☉","1.22 R☉","约 5790 K","半人马座α星A，类太阳恒星，与B星及比邻星构成三合星"],"Barnard's Star":["M4V 红矮星","0.14 M☉","0.20 R☉","约 3130 K","自行最大的恒星，年龄约100亿年的老年红矮星"],"Wolf 359":["M6.5V 红矮星","0.11 M☉","0.16 R☉","约 2800 K","极暗弱的耀星，质量仅略高于恒星下限"],"Lalande 21185":["M2V 红矮星","0.39 M☉","0.39 R☉","约 3830 K","北天最亮的红矮星之一，已知拥有行星系统"],"Sirius":["A1V 蓝白主序星","2.06 M☉","1.71 R☉","约 9940 K","夜空最亮恒星，伴有白矮星天狼B，古埃及历法依据"],"Luyten's Star":["M3.5V 红矮星","0.26 M☉","0.35 R☉","约 3370 K","高自行红矮星，紧邻南河三，已发现行星"],"Ross 154":["M3.5V 红矮星","0.24 M☉","0.31 R☉","约 3410 K","人马座耀星，耀发频繁"],"Ross 248":["M5.5V 红矮星","0.14 M☉","0.18 R☉","约 3100 K","约3.4万年后将取代比邻星成为距太阳最近的恒星"],"Epsilon Eridani":["K2V 橙矮星","0.82 M☉","0.74 R☉","约 5080 K","年轻的类太阳恒星，拥有小行星带与尘埃盘"],"Lacaille 9352":["M0.5V 红矮星","0.51 M☉","0.47 R☉","约 3690 K","高自行红矮星，已确认两颗行星"],"Ross 128":["M4V 红矮星","0.17 M☉","0.20 R☉","约 3190 K","拥有温带行星Ross 128 b，被认为是宜居候选"],"Procyon":["F5IV-V 黄白亚巨星","1.50 M☉","2.05 R☉","约 6530 K","小犬座α，\"南河三\"，同样伴有白矮星伴星"],"Tau Ceti":["G8V 黄矮星","0.78 M☉","0.79 R☉","约 5340 K","类太阳恒星，科幻作品常客，拥有庞大尘埃盘"],"Epsilon Indi":["K5V 橙矮星","0.69 M☉","0.73 R☉","约 4390 K","印第安座ε，伴有一对褐矮星"],"61 Cygni A":["K5V 橙矮星","0.70 M☉","0.67 R☉","约 4370 K","历史上第一颗测得视差（距离）的恒星（贝塞尔，1838）"],"Groombridge 34":["M1.5V 红矮星","0.39 M☉","0.39 R☉","约 3600 K","双星系统，两颗红矮星互绕"],"Vega":["A0V 蓝白主序星","2.14 M☉","2.36 R☉","约 9600 K","织女星，历史上的测光标准星，自转极快呈扁球形"],"Fomalhaut":["A3V 蓝白主序星","1.92 M☉","1.84 R☉","约 8590 K","北落师门，\"秋夜孤星\"，拥有醒目的尘埃碎屑环"],"Altair":["A7V 白色主序星","1.79 M☉","1.63 R☉","约 7550 K","牛郎星，自转一周仅约9小时，赤道显著隆起"],"Pollux":["K0III 橙巨星","1.91 M☉","约 8.8 R☉","约 4670 K","北河三，最近的巨星之一，已确认拥有系外行星"],"Arcturus":["K1.5III 橙巨星","1.08 M☉","约 25 R☉","约 4290 K","大角星，北天最亮恒星，红巨星分支代表"],"Capella":["G8III+G1III 双巨星","2.57 M☉ (合计)","约 12 R☉","约 4970 K","五车二，两对双星组成的四合星，主星对为双巨星"],"Deneb":["A2Ia 蓝白超巨星","约 19 M☉","约 203 R☉","约 8525 K","天津四，光度约为太阳20万倍，遥远却仍属一等星"],"Regulus":["B8IV 蓝白亚巨星","3.8 M☉","3.1 R☉","约 12460 K","轩辕十四，自转极快的四合星，赤道速度逾300 km/s"],"Spica":["B1V+B2V 蓝白双星","约 11 M☉ (主星)","约 7 R☉","约 22400 K","角宿一，大质量密近光谱双星，相互绕转仅4天"],"Antares":["M1.5Iab 红超巨星","约 12 M☉","约 680 R☉","约 3660 K","心宿二，\"火星之敌\"，未来超新星候选"],"Aldebaran":["K5III 橙巨星","1.16 M☉","约 44 R☉","约 3910 K","毕宿五，\"金牛之眼\"，毕星团前景巨星"],"Betelgeuse":["M1-2Ia 红超巨星","约 16.5 M☉","约 760 R☉","约 3600 K","参宿四，半规则变星，著名的近距超新星候选"],"Rigel":["B8Ia 蓝超巨星","约 21 M☉","约 79 R☉","约 12100 K","参宿七，猎户座最亮星，光度约为太阳12万倍"],"Achernar":["B6V 蓝白主序星","6.7 M☉","7.3 R☉","约 15000 K","水委一，已知自转最快的恒星之一，呈显著扁球形"],"Hadar":["B1III 蓝巨星","约 12 M☉","约 9 R☉","约 25000 K","马腹一（半人马座β），大质量近距双星"],"Acrux":["B0.5IV 蓝白亚巨星","约 17.8 M☉","约 7.8 R☉","约 24000 K","十字架二，南十字座最亮星，多星系统"],"Polaris":["F7Ib 黄超巨星","5.4 M☉","约 37.5 R☉","约 6015 K","北极星，现任北天极星，经典造父变星"],"Canopus":["A9II 亮巨星","约 8 M☉","约 71 R☉","约 7400 K","老人星，夜空第二亮星，航天器导航基准星"],"Castor":["A1V 六合星","2.15 M☉ (Aa)","2.4 R☉","约 10300 K","北河二，实为六颗恒星组成的复杂系统"],"Bellatrix":["B2III 蓝巨星","约 8.6 M☉","约 5.8 R☉","约 21800 K","参宿五，猎户座\"女武士星\""],"Alnilam":["B0Ia 蓝超巨星","约 30 M☉","约 32 R☉","约 27500 K","参宿二，猎户腰带中星，光度约为太阳40万倍"],"Mintaka":["O9.5II 蓝巨星","约 24 M☉","约 16.5 R☉","约 29500 K","参宿一，腰带西星，与赤道几乎精确重合"],"Algol":["B8V 食双星","3.17 M☉","2.73 R☉","约 12550 K","大陵五，\"魔星\"，食双星原型，亮度以2.87天周期变化"],"Mira":["M7III 红巨星","1.18 M☉","约 400 R☉","约 2900 K","刍藁增二，长周期变星原型，亮度变化逾千倍"],"Mizar":["A1V 白色主序星","2.2 M☉","2.4 R☉","约 9000 K","开阳，与辅星构成著名肉眼双星，实为四合星"],"Dubhe":["K0III 橙巨星","4.25 M☉","约 30 R☉","约 4660 K","天枢，北斗一，指极星之一，亮度轻微变化"],"Merak":["A1V 白色主序星","2.84 M☉","3.0 R☉","约 9377 K","天璇，北斗二，与天枢连线指向北极星"],"Mirfak":["F5Ib 黄超巨星","约 8.5 M☉","约 68 R☉","约 6350 K","天船三，英仙座α，英仙α星团核心"],"Hamal":["K2III 橙巨星","1.5 M☉","约 15 R☉","约 4480 K","娄宿三，白羊座α，秋夜明星"],"Alpheratz":["B8IV 蓝白亚巨星","3.8 M☉","2.7 R☉","约 13800 K","壁宿二，仙女座与飞马座共用\"秋季四边形\"角星"],"Menkalinan":["A1IV 食双星","2.77 M☉","2.7 R☉","约 9350 K","五车三，御夫座β，食光谱双星"]};
+  var PHYS = {"Sol":["G2V 黄矮星","1.00 M☉","1.00 R☉","约 5772 K","太阳，我们的母恒星，星海坐标系的原点。距地球仅 8 光分，光度为 L☉ 标准单位"],"Proxima Centauri":["M5.5Ve 红矮星","0.12 M☉","0.15 R☉","约 3050 K","距太阳最近的恒星，耀星，属半人马座α三合星系统"],"Rigil Kentaurus":["G2V 黄矮星","1.10 M☉","1.22 R☉","约 5790 K","半人马座α星A，类太阳恒星，与B星及比邻星构成三合星"],"Barnard's Star":["M4V 红矮星","0.14 M☉","0.20 R☉","约 3130 K","自行最大的恒星，年龄约100亿年的老年红矮星"],"Wolf 359":["M6.5V 红矮星","0.11 M☉","0.16 R☉","约 2800 K","极暗弱的耀星，质量仅略高于恒星下限"],"Lalande 21185":["M2V 红矮星","0.39 M☉","0.39 R☉","约 3830 K","北天最亮的红矮星之一，已知拥有行星系统"],"Sirius":["A1V 蓝白主序星","2.06 M☉","1.71 R☉","约 9940 K","夜空最亮恒星，伴有白矮星天狼B，古埃及历法依据"],"Luyten's Star":["M3.5V 红矮星","0.26 M☉","0.35 R☉","约 3370 K","高自行红矮星，紧邻南河三，已发现行星"],"Ross 154":["M3.5V 红矮星","0.24 M☉","0.31 R☉","约 3410 K","人马座耀星，耀发频繁"],"Ross 248":["M5.5V 红矮星","0.14 M☉","0.18 R☉","约 3100 K","约3.4万年后将取代比邻星成为距太阳最近的恒星"],"Epsilon Eridani":["K2V 橙矮星","0.82 M☉","0.74 R☉","约 5080 K","年轻的类太阳恒星，拥有小行星带与尘埃盘"],"Lacaille 9352":["M0.5V 红矮星","0.51 M☉","0.47 R☉","约 3690 K","高自行红矮星，已确认两颗行星"],"Ross 128":["M4V 红矮星","0.17 M☉","0.20 R☉","约 3190 K","拥有温带行星Ross 128 b，被认为是宜居候选"],"Procyon":["F5IV-V 黄白亚巨星","1.50 M☉","2.05 R☉","约 6530 K","小犬座α，\"南河三\"，同样伴有白矮星伴星"],"Tau Ceti":["G8V 黄矮星","0.78 M☉","0.79 R☉","约 5340 K","类太阳恒星，科幻作品常客，拥有庞大尘埃盘"],"Epsilon Indi":["K5V 橙矮星","0.69 M☉","0.73 R☉","约 4390 K","印第安座ε，伴有一对褐矮星"],"61 Cygni A":["K5V 橙矮星","0.70 M☉","0.67 R☉","约 4370 K","历史上第一颗测得视差（距离）的恒星（贝塞尔，1838）"],"Groombridge 34":["M1.5V 红矮星","0.39 M☉","0.39 R☉","约 3600 K","双星系统，两颗红矮星互绕"],"Vega":["A0V 蓝白主序星","2.14 M☉","2.36 R☉","约 9600 K","织女星，历史上的测光标准星，自转极快呈扁球形"],"Fomalhaut":["A3V 蓝白主序星","1.92 M☉","1.84 R☉","约 8590 K","北落师门，\"秋夜孤星\"，拥有醒目的尘埃碎屑环"],"Altair":["A7V 白色主序星","1.79 M☉","1.63 R☉","约 7550 K","牛郎星，自转一周仅约9小时，赤道显著隆起"],"Pollux":["K0III 橙巨星","1.91 M☉","约 8.8 R☉","约 4670 K","北河三，最近的巨星之一，已确认拥有系外行星"],"Arcturus":["K1.5III 橙巨星","1.08 M☉","约 25 R☉","约 4290 K","大角星，北天最亮恒星，红巨星分支代表"],"Capella":["G8III+G1III 双巨星","2.57 M☉ (合计)","约 12 R☉","约 4970 K","五车二，两对双星组成的四合星，主星对为双巨星"],"Deneb":["A2Ia 蓝白超巨星","约 19 M☉","约 203 R☉","约 8525 K","天津四，光度约为太阳20万倍，遥远却仍属一等星"],"Regulus":["B8IV 蓝白亚巨星","3.8 M☉","3.1 R☉","约 12460 K","轩辕十四，自转极快的四合星，赤道速度逾300 km/s"],"Spica":["B1V+B2V 蓝白双星","约 11 M☉ (主星)","约 7 R☉","约 22400 K","角宿一，大质量密近光谱双星，相互绕转仅4天"],"Antares":["M1.5Iab 红超巨星","约 12 M☉","约 680 R☉","约 3660 K","心宿二，\"火星之敌\"，未来超新星候选"],"Aldebaran":["K5III 橙巨星","1.16 M☉","约 44 R☉","约 3910 K","毕宿五，\"金牛之眼\"，毕星团前景巨星"],"Betelgeuse":["M1-2Ia 红超巨星","约 16.5 M☉","约 760 R☉","约 3600 K","参宿四，半规则变星，著名的近距超新星候选"],"Rigel":["B8Ia 蓝超巨星","约 21 M☉","约 79 R☉","约 12100 K","参宿七，猎户座最亮星，光度约为太阳12万倍"],"Achernar":["B6V 蓝白主序星","6.7 M☉","7.3 R☉","约 15000 K","水委一，已知自转最快的恒星之一，呈显著扁球形"],"Hadar":["B1III 蓝巨星","约 12 M☉","约 9 R☉","约 25000 K","马腹一（半人马座β），大质量近距双星"],"Acrux":["B0.5IV 蓝白亚巨星","约 17.8 M☉","约 7.8 R☉","约 24000 K","十字架二，南十字座最亮星，多星系统"],"Polaris":["F7Ib 黄超巨星","5.4 M☉","约 37.5 R☉","约 6015 K","北极星，现任北天极星，经典造父变星"],"Canopus":["A9II 亮巨星","约 8 M☉","约 71 R☉","约 7400 K","老人星，夜空第二亮星，航天器导航基准星"],"Castor":["A1V 六合星","2.15 M☉ (Aa)","2.4 R☉","约 10300 K","北河二，实为六颗恒星组成的复杂系统"],"Bellatrix":["B2III 蓝巨星","约 8.6 M☉","约 5.8 R☉","约 21800 K","参宿五，猎户座\"女武士星\""],"Alnilam":["B0Ia 蓝超巨星","约 30 M☉","约 32 R☉","约 27500 K","参宿二，猎户腰带中星，光度约为太阳40万倍"],"Mintaka":["O9.5II 蓝巨星","约 24 M☉","约 16.5 R☉","约 29500 K","参宿一，腰带西星，与赤道几乎精确重合"],"Algol":["B8V 食双星","3.17 M☉","2.73 R☉","约 12550 K","大陵五，\"魔星\"，食双星原型，亮度以2.87天周期变化"],"Mira":["M7III 红巨星","1.18 M☉","约 400 R☉","约 2900 K","刍藁增二，长周期变星原型，亮度变化逾千倍"],"Mizar":["A1V 白色主序星","2.2 M☉","2.4 R☉","约 9000 K","开阳，与辅星构成著名肉眼双星，实为四合星"],"Dubhe":["K0III 橙巨星","4.25 M☉","约 30 R☉","约 4660 K","天枢，北斗一，指极星之一，亮度轻微变化"],"Merak":["A1V 白色主序星","2.84 M☉","3.0 R☉","约 9377 K","天璇，北斗二，与天枢连线指向北极星"],"Mirfak":["F5Ib 黄超巨星","约 8.5 M☉","约 68 R☉","约 6350 K","天船三，英仙座α，英仙α星团核心"],"Hamal":["K2III 橙巨星","1.5 M☉","约 15 R☉","约 4480 K","娄宿三，白羊座α，秋夜明星"],"Alpheratz":["B8IV 蓝白亚巨星","3.8 M☉","2.7 R☉","约 13800 K","壁宿二，仙女座与飞马座共用\"秋季四边形\"角星"],"Menkalinan":["A1IV 食双星","2.77 M☉","2.7 R☉","约 9350 K","五车三，御夫座β，食光谱双星"]};
   var cardTimer = 0;
   function showStarCard(d) {
     var p = PHYS[d.en];
@@ -889,8 +930,19 @@
     if (mode === 'travel' && targetIdx >= 0) {
       var dTx = gx[targetIdx] - camX, dTy = gy[targetIdx] - camY, dTz = gz[targetIdx] - camZ;
       var dist = Math.hypot(dTx, dTy, dTz);
-      var stopR = Math.max(0.35, 0.03 * travelD0);
+      var stopR = stopRadius();
       if (dist <= stopR) { stopTravel('arrive'); return; }
+      // v2.3: closed-loop guidance — fly along the TRUE unit vector to the target each frame.
+      // The old code flew along the view basis, which carries aiming tolerance (~0.02 rad):
+      // 0.02 rad over an 800 pc trip = ~16 pc lateral miss, so the ship could never enter
+      // Sol's fixed 0.35 pc parking sphere and sailed past into empty space (black screen).
+      var tx2 = dTx / dist, ty2 = dTy / dist, tz2 = dTz / dist;
+      // keep eyes on target: gently steer the view toward it (visual only, motion is exact)
+      var w2 = aimAt(targetIdx, false);
+      var st2 = Math.min(1, dt * 2.2);
+      yaw += (w2.yaw - yaw) * st2; pitch += (w2.pitch - pitch) * st2;
+      pitch = Math.max(-1.45, Math.min(1.45, pitch));
+      updateBasis();
       var userV = warpToSpeed(warpLevel);
       var cruise = userV > 0 ? userV : 0.9;
       var a = Math.max(4, cruise * 0.35);
@@ -902,10 +954,10 @@
       var step = vNow * dt;
       if (dist - step <= stopR) {   // would reach/pass the stop point this frame: land exactly
         var kk = step > 0 ? Math.max(0, (dist - stopR) / step) : 0;
-        camX += fx * step * kk; camY += fy * step * kk; camZ += fz * step * kk;
+        camX += tx2 * step * kk; camY += ty2 * step * kk; camZ += tz2 * step * kk;
         stopTravel('arrive'); return;
       }
-      camX += fx * step; camY += fy * step; camZ += fz * step;
+      camX += tx2 * step; camY += ty2 * step; camZ += tz2 * step;
     } else {
       // v2.2 manual helm: arrow keys steer (idle mode only, auto-nav owns the helm otherwise)
       var st = 1.7 * dt;
@@ -938,7 +990,7 @@
     if (mode === 'travel' && targetIdx >= 0) {
       var d = destByI[targetIdx];
       var dist = Math.hypot(gx[targetIdx] - camX, gy[targetIdx] - camY, gz[targetIdx] - camZ);
-      var stopR = Math.max(0.35, 0.03 * travelD0);
+      var stopR = stopRadius();
       var remain = Math.max(0, dist - stopR);
       var cruise = warpToSpeed(warpLevel);
       var eta;

@@ -110,7 +110,7 @@
 <body>
 <canvas id="stage"></canvas>
 <div id="backdrop"></div>
-<div id="ver">玉兔号星海 v2.5</div>
+<div id="ver">玉兔号星海 v3.0</div>
 <div id="btnDests" class="mbtn">◈</div>
 <div id="btnParams" class="mbtn">⚙</div>
 <div id="topbar" class="panel">
@@ -154,7 +154,7 @@
   <div class="note" id="scNote"></div>
   <button id="scClose">继续航行</button>
 </div>
-<div id="hint">方向键转向 · 滚轮前进/后退 · 点星标导航 · 长按/右键星标看介绍 · [S]字符切换 · [ESC]中止航行</div>
+<div id="hint">←→ 转向 · ↑↓ 推进/减速 · Shift+↑↓ 俯仰 · 滚轮推进 · 点星标导航 · 长按/右键星标看介绍 · [S]字符切换 · [ESC]中止航行</div>
 <div id="credit">恒星数据：HYG Database v4.1 (CC BY-SA 4.0) · astronexus</div>
 <script>
 (function () {
@@ -167,6 +167,9 @@
   var DESTS = [{"cn":"比邻星","en":"Proxima Centauri","i":34},{"cn":"南门二","en":"Rigil Kentaurus","i":35},{"cn":"巴纳德星","en":"Barnard's Star","i":37},{"cn":"沃尔夫359","en":"Wolf 359","i":46},{"cn":"拉兰德21185","en":"Lalande 21185","i":26},{"cn":"天狼星","en":"Sirius","i":19},{"cn":"鲁坦星","en":"Luyten's Star","i":20},{"cn":"罗斯154","en":"Ross 154","i":39},{"cn":"罗斯248","en":"Ross 248","i":47},{"cn":"天苑四","en":"Epsilon Eridani","i":9},{"cn":"拉卡伊9352","en":"Lacaille 9352","i":45},{"cn":"罗斯128","en":"Ross 128","i":28},{"cn":"南河三","en":"Procyon","i":22},{"cn":"天仓五","en":"Tau Ceti","i":3},{"cn":"印第安座ε","en":"Epsilon Indi","i":43},{"cn":"天鹅座61","en":"61 Cygni A","i":42},{"cn":"格鲁姆布里奇34","en":"Groombridge 34","i":1},{"cn":"织女星","en":"Vega","i":38},{"cn":"北落师门","en":"Fomalhaut","i":44},{"cn":"牛郎星","en":"Altair","i":40},{"cn":"北河三","en":"Pollux","i":23},{"cn":"大角星","en":"Arcturus","i":33},{"cn":"五车二","en":"Capella","i":12},{"cn":"天津四","en":"Deneb","i":41},{"cn":"轩辕十四","en":"Regulus","i":24},{"cn":"角宿一","en":"Spica","i":31},{"cn":"心宿二","en":"Antares","i":36},{"cn":"毕宿五","en":"Aldebaran","i":10},{"cn":"参宿四","en":"Betelgeuse","i":16},{"cn":"参宿七","en":"Rigel","i":11},{"cn":"水委一","en":"Achernar","i":2},{"cn":"马腹一","en":"Hadar","i":32},{"cn":"十字架二","en":"Acrux","i":29},{"cn":"北极星","en":"Polaris","i":6},{"cn":"老人星","en":"Canopus","i":18},{"cn":"北河二","en":"Castor","i":21},{"cn":"参宿五","en":"Bellatrix","i":13},{"cn":"参宿二","en":"Alnilam","i":15},{"cn":"参宿一","en":"Mintaka","i":14},{"cn":"大陵五","en":"Algol","i":7},{"cn":"刍藁增二","en":"Mira","i":5},{"cn":"开阳","en":"Mizar","i":30},{"cn":"天枢","en":"Dubhe","i":27},{"cn":"天璇","en":"Merak","i":25},{"cn":"天船三","en":"Mirfak","i":8},{"cn":"娄宿三","en":"Hamal","i":4},{"cn":"壁宿二","en":"Alpheratz","i":0},{"cn":"五车三","en":"Menkalinan","i":17}];
   var IMG_W = 1600, IMG_H = 1690, G = 6, RABBIT_COUNT = 6111;
   var NOZZLES = [[800,706,40],[662,932,40],[938,932,40],[592,842,20],[1008,842,20]];
+  // v3.0 nav lights, anchored to the particle extents: red/green wingtip strobes,
+  // blue nose beacon, slow-pulse formation lights on the upper hull
+  var NAVLIGHTS = [[212,880,'r'],[1386,880,'g'],[800,329,'b'],[650,550,'f'],[950,550,'f']];
   var LY_PER_PC = 3.2616, PC_PER_C = 1.0292e8;
 
   function b64bytes(s) {
@@ -355,6 +358,7 @@
   var manualWarp = 0;          // signed manual speed level -10..10 (v2.2 manual flight)
   var travelD0 = 1;            // trip distance at start (v2.4: declared with the other nav state)
   var keysOn = {};             // steering keys held down
+  var shiftOn = false;         // v3.0: Shift = pitch trim modifier (Shift+↑/↓)
 
   function warpToSpeed(w) {
     return w <= 0 ? 0 : 0.35 * Math.pow(2.6, w);
@@ -601,9 +605,13 @@
     }
     if (e.key === 's' || e.key === 'S') { params.glyphOn = !params.glyphOn; $('glyphOn').checked = params.glyphOn; shipDirty = true; saveParams(); wake(); }
     if (e.key.indexOf('Arrow') === 0) { keysOn[e.key] = true; e.preventDefault(); wake(); }
+    if (e.key === 'Shift') shiftOn = true;
   });
-  window.addEventListener('keyup', function (e) { if (e.key.indexOf('Arrow') === 0) { keysOn[e.key] = false; wake(); } });
-  window.addEventListener('blur', function () { keysOn = {}; });
+  window.addEventListener('keyup', function (e) {
+    if (e.key.indexOf('Arrow') === 0) { keysOn[e.key] = false; wake(); }
+    if (e.key === 'Shift') shiftOn = false;
+  });
+  window.addEventListener('blur', function () { keysOn = {}; shiftOn = false; });
   document.addEventListener('gesturestart', function (e) { e.preventDefault(); });   // block iOS page zoom during pinch
 
   // params UI
@@ -897,40 +905,126 @@
   var R = Math.max(80, Math.min(IMG_W, IMG_H) * 0.105), R2 = R * R;
   var FORCE = 5.6, SPRING = 0.045, DAMP = 0.865;
   var maxV2 = 1;
+  // v3.0 chase-cam pose: bank into turns, lift on pitch, subtle zoom with speed
+  var shipBank = 0, shipPY = 0, shipSc = 1, yawVel = 0, pitchVel = 0, prevYaw = yaw, prevPitch = pitch;
   // ================= engine flames =================
+  // v3.0 chase-cam grammar (backported from star-islet v0.4): the bloom expands TOWARD
+  // the camera (petals radiate outward in screen space). The old downward tail read as a
+  // top-down scroller and fought the 3D starfield tunnel.
   function renderFlame() {
-    var lv = Math.max(0, Math.min(1, (Math.abs(vNow) - 0.4) / 500));
+    var fwd = Math.max(0, Math.min(1, (vNow - 0.4) / 420));
+    var rev = vNow < -0.4 ? Math.min(1, (-vNow - 0.4) / 420) : 0;
+    var tF = performance.now() / 1000;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'lighter';
     for (var n = 0; n < NOZZLES.length; n++) {
-      var baseR = Math.max(4, (NOZZLES[n][2] || 40) * scale);
-      var nx = offX + NOZZLES[n][0] * scale + (Math.random() - 0.5) * 2.5;
-      var ny = offY + NOZZLES[n][1] * scale;
-      var fy = ny + baseR * 2.2;                               // flame starts at nozzle bell edge
-      var fl = Math.random();
-      var L = lv > 0 ? baseR * (2.2 + lv * 15) * (0.82 + fl * 0.36) : baseR * (0.9 + fl * 0.5);
-      var wR = lv > 0 ? baseR * (0.9 + lv * 0.55) : baseR * 0.5;
-      var gR = baseR * (1.6 + lv * 1.4);                       // nozzle glow
+      var baseR = Math.max(3, (NOZZLES[n][2] || 40) * scale);
+      var nx = offX + NOZZLES[n][0] * scale + (Math.random() - 0.5) * 1.6;
+      var ny = offY + NOZZLES[n][1] * scale + (Math.random() - 0.5) * 1.6;
+      // breathing bell glow at rest, expanding bloom under thrust
+      var gR = baseR * (1.7 + fwd * 2.8) * (0.94 + 0.12 * Math.sin(tF * 9 + n * 1.7));
+      var a0 = 0.30 + fwd * 0.55;
       var gr = ctx.createRadialGradient(nx, ny, 0, nx, ny, gR);
-      gr.addColorStop(0, lv > 0 ? 'rgba(255,190,110,' + (0.55 + 0.3 * lv).toFixed(2) + ')' : 'rgba(255,170,90,0.28)');
-      gr.addColorStop(1, 'rgba(255,120,40,0)');
+      gr.addColorStop(0, 'rgba(255,235,190,' + a0.toFixed(2) + ')');
+      gr.addColorStop(0.45, 'rgba(255,170,80,' + (a0 * 0.5).toFixed(2) + ')');
+      gr.addColorStop(1, 'rgba(255,110,40,0)');
       ctx.fillStyle = gr;
       ctx.beginPath(); ctx.arc(nx, ny, gR, 0, 7); ctx.fill();
-      var layers = lv > 0                                     // outer orange -> mid yellow -> blue-white core
-        ? [[1, 'rgba(255,110,30,0.5)'], [0.66, 'rgba(255,205,110,0.75)'], [0.38, 'rgba(225,240,255,0.95)']]
-        : [[1, 'rgba(255,150,60,0.4)'], [0.5, 'rgba(255,220,150,0.6)']];
-      for (var li = 0; li < layers.length; li++) {
-        var fw = wR * layers[li][0], fL = L * (li === 0 ? 1 : (li === 1 ? 0.8 : 0.62));
-        var lg = ctx.createLinearGradient(nx, fy, nx, fy + fL);
-        lg.addColorStop(0, layers[li][1]);
-        lg.addColorStop(1, 'rgba(255,80,20,0)');
-        ctx.fillStyle = lg;
-        ctx.beginPath();
-        ctx.moveTo(nx - fw, fy);
-        ctx.quadraticCurveTo(nx - fw * 0.3, fy + fL * 0.6, nx, fy + fL);
-        ctx.quadraticCurveTo(nx + fw * 0.3, fy + fL * 0.6, nx + fw, fy);
-        ctx.closePath(); ctx.fill();
+      // white-hot throat
+      ctx.fillStyle = 'rgba(255,246,214,' + (0.45 + fwd * 0.5).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(nx, ny, baseR * (0.5 + fwd * 0.55), 0, 7); ctx.fill();
+      // petals: exhaust sparks rushing past the viewer, radiating from the nozzle centre
+      if (fwd > 0.02) {
+        var petals = 3 + ((fwd * 7) | 0);
+        for (var pt = 0; pt < petals; pt++) {
+          var ang = Math.random() * 6.2832;
+          var r0 = baseR * (0.7 + Math.random() * 0.5);
+          var r1 = baseR * (1.1 + Math.random() * 1.6 + fwd * 2.8);
+          var lg = ctx.createLinearGradient(nx + Math.cos(ang) * r0, ny + Math.sin(ang) * r0,
+                                            nx + Math.cos(ang) * r1, ny + Math.sin(ang) * r1);
+          lg.addColorStop(0, 'rgba(255,215,130,0.85)');
+          lg.addColorStop(1, 'rgba(255,110,30,0)');
+          ctx.strokeStyle = lg; ctx.lineWidth = Math.max(1, baseR * 0.28);
+          ctx.beginPath();
+          ctx.moveTo(nx + Math.cos(ang) * r0, ny + Math.sin(ang) * r0);
+          ctx.lineTo(nx + Math.cos(ang) * r1, ny + Math.sin(ang) * r1);
+          ctx.stroke();
+        }
       }
+      // reverse thrust: faint cool counter-flow ring
+      if (rev > 0.02) {
+        ctx.strokeStyle = 'rgba(150,195,255,' + (0.25 * rev).toFixed(2) + ')';
+        ctx.lineWidth = Math.max(1, baseR * 0.2);
+        ctx.beginPath(); ctx.arc(nx, ny, baseR * (1.5 + rev * 1.6), 0, 7); ctx.stroke();
+      }
+    }
+    renderNavLights();                       // v3.0: wingtip strobes / nose beacon (additive)
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // v3.0: navigation lights — red/green wingtip strobes, nose beacon, formation lights
+  function renderNavLights() {
+    var t = performance.now() / 1000;
+    for (var nl = 0; nl < NAVLIGHTS.length; nl++) {
+      var L3 = NAVLIGHTS[nl], kind = L3[2], on;
+      if (kind === 'f') on = 0.5 + 0.3 * Math.sin(t * 2.2 + nl);
+      else if (kind === 'r') on = (t % 1.3) < 0.09 ? 1 : 0;
+      else if (kind === 'g') on = ((t + 0.65) % 1.3) < 0.09 ? 1 : 0;
+      else on = 0.45 + 0.45 * Math.sin(t * 1.5);
+      if (on <= 0.03) continue;
+      var lx = offX + L3[0] * scale, ly = offY + L3[1] * scale;
+      var col = kind === 'r' ? '255,80,80' : kind === 'g' ? '90,255,150' : '120,200,255';
+      var lr = Math.max(6, 30 * scale) * (0.7 + 0.5 * on);
+      var lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+      lg.addColorStop(0, 'rgba(' + col + ',' + (0.9 * on).toFixed(2) + ')');
+      lg.addColorStop(0.4, 'rgba(' + col + ',' + (0.22 * on).toFixed(2) + ')');
+      lg.addColorStop(1, 'rgba(' + col + ',0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath(); ctx.arc(lx, ly, lr, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.85 * on).toFixed(2) + ')';
+      ctx.fillRect(lx - 1.3, ly - 1.3, 2.6, 2.6);
+    }
+  }
+  // v3.0: tunnel speed lines — faint radial streaks rushing past the cockpit at high speed.
+  // Anchors the "flying INTO the screen" grammar that the vanishing point (hidden by the
+  // ship) used to leave ambiguous. Backported from star-islet v0.4.
+  var SLN = 110, slAng = new Float32Array(SLN), slR = new Float32Array(SLN),
+      slSp = new Float32Array(SLN), slLen = new Float32Array(SLN), slInit = false;
+  function renderSpeedLines(dt) {
+    var gain = Math.max(0, Math.min(1, (Math.abs(vNow) - 25) / 900)) * params.trailGain;
+    if (gain <= 0.02) { slInit = false; return; }
+    var cx = W / 2, cy = H / 2, maxR = Math.hypot(W, H) / 2, r0 = Math.min(W, H) * 0.22;
+    if (!slInit) {
+      for (var i2 = 0; i2 < SLN; i2++) {
+        slAng[i2] = Math.random() * 6.2832;
+        slR[i2] = r0 + Math.random() * (maxR - r0);
+        slSp[i2] = 0.55 + Math.random() * 0.9;
+        slLen[i2] = 0.05 + Math.random() * 0.12;
+      }
+      slInit = true;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 1.4;
+    var v = (0.35 + gain * 1.1) * maxR * 1.9;
+    for (var i = 0; i < SLN; i++) {
+      slR[i] += slSp[i] * v * dt;
+      if (slR[i] > maxR) {                       // respawn near the tunnel mouth
+        slAng[i] = Math.random() * 6.2832;
+        slR[i] = r0 + Math.random() * (maxR - r0) * 0.25;
+        slSp[i] = 0.55 + Math.random() * 0.9;
+        continue;
+      }
+      var rr = slR[i] / maxR;
+      var a = gain * Math.min(1, (rr - 0.16) * 2.4) * (0.3 + slSp[i] * 0.45);
+      if (a <= 0.02) continue;
+      var L2 = slLen[i] * maxR * (0.5 + gain);
+      var ca = Math.cos(slAng[i]), sa = Math.sin(slAng[i]);
+      ctx.strokeStyle = 'rgba(195,218,255,' + a.toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.moveTo(cx + ca * slR[i], cy + sa * slR[i]);
+      ctx.lineTo(cx + ca * (slR[i] + L2), cy + sa * (slR[i] + L2));
+      ctx.stroke();
     }
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -1000,14 +1094,21 @@
       }
       camX += tx2 * step; camY += ty2 * step; camZ += tz2 * step;
     } else {
-      // v2.2 manual helm: arrow keys steer (idle mode only, auto-nav owns the helm otherwise)
+      // v3.0 helm grammar matches the chase cam: ↑/↓ throttle fore/aft, ←/→ yaw,
+      // Shift+↑/↓ pitch trim (idle mode only; auto-nav owns the helm otherwise).
+      // Old v2.2 mapping (↑↓ = pitch) fought the "flying into the screen" read.
       var st = 1.7 * dt;
       if (keysOn['ArrowLeft']) yaw -= st;
       if (keysOn['ArrowRight']) yaw += st;
-      if (keysOn['ArrowUp']) pitch += st * 0.72;
-      if (keysOn['ArrowDown']) pitch -= st * 0.72;
-      if (keysOn['ArrowLeft'] || keysOn['ArrowRight'] || keysOn['ArrowUp'] || keysOn['ArrowDown']) {
-        pitch = Math.max(-1.45, Math.min(1.45, pitch));
+      if (keysOn['ArrowUp'] || keysOn['ArrowDown']) {
+        var dir = keysOn['ArrowUp'] ? 1 : -1;
+        if (shiftOn) {
+          pitch = Math.max(-1.45, Math.min(1.45, pitch + dir * st * 0.72));
+        } else {
+          setManual(manualWarp + dir * 3.4 * dt);
+        }
+      }
+      if (keysOn['ArrowLeft'] || keysOn['ArrowRight'] || (shiftOn && (keysOn['ArrowUp'] || keysOn['ArrowDown']))) {
         updateBasis();
       }
       // v2.2 manual / cruise movement: signed manualWarp (wheel & pinch), slider as forward fallback
@@ -1023,6 +1124,9 @@
         vNow = Math.abs(vEase) > 0.001 ? vEase : 0;
       }
     }
+    // v3.0: attitude rates feed the chase-cam pose (bank on yaw, lift on pitch)
+    if (dt > 0) { yawVel = (yaw - prevYaw) / dt; pitchVel = (pitch - prevPitch) / dt; }
+    prevYaw = yaw; prevPitch = pitch;
   }
 
   var lastStatusStr = '';
@@ -1063,13 +1167,22 @@
     if (!sleeping) {
       updateNav(dt);
       renderStars();
+      renderSpeedLines(dt);            // v3.0: tunnel streaks anchor the chase-cam grammar
       if (params.rabbitOn) {
         renderFlame();
         renderRabbit();
         var jitA = Math.min(2.4, Math.abs(vNow) / 300);
         var jx2 = (Math.random() - 0.5) * jitA, jy2 = (Math.random() - 0.5) * jitA * 0.7;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);   // physical px space: avoid dpr^2 offset after renderFlame
-        ctx.drawImage(off, (offX + jx2) * dpr, (offY + jy2) * dpr, IMG_W * scale * dpr, IMG_H * scale * dpr);
+        // v3.0 chase-cam pose: bank into turns (yaw rate), lift on pitch, subtle zoom with speed
+        var k4 = Math.min(1, dt * 4.5);
+        shipBank += (Math.max(-0.15, Math.min(0.15, yawVel * 0.5)) - shipBank) * k4;
+        shipPY += (Math.max(-14, Math.min(14, -pitchVel * 26)) - shipPY) * k4;
+        shipSc += ((1 + Math.min(0.055, Math.abs(vNow) * 4e-5)) - shipSc) * Math.min(1, dt * 2.2);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // css-px space (same as renderFlame nozzles)
+        ctx.translate(offX + IMG_W * scale / 2 + jx2, offY + IMG_H * scale / 2 + jy2);
+        ctx.rotate(shipBank); ctx.scale(shipSc, shipSc);
+        ctx.drawImage(off, -IMG_W * scale / 2, -IMG_H * scale / 2 + shipPY, IMG_W * scale, IMG_H * scale);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       updateHUD();
       updateAudio();
